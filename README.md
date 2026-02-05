@@ -261,6 +261,180 @@ Please include examples of the patterns you're adding support for.
 - Seconds not supported (standard cron is minute-level)
 - No timezone awareness
 
+## Real-World Scenarios
+
+### Setting up database backups
+```bash
+# Need: Daily backups at 2am
+$ cron-explain "every day at 2am"
+Input:  every day at 2am
+Cron:   0 2 * * *
+Means:  At 02:00
+
+# Add to crontab
+$ crontab -e
+0 2 * * * /home/user/backup-db.sh
+```
+
+### Monitoring disk space during business hours
+```bash
+# Need: Check disk every 30 min, but only 9am-6pm on weekdays
+$ cron-explain "every 30 minutes between 9am and 6pm on weekdays"
+Input:  every 30 minutes between 9am and 6pm on weekdays
+Cron:   */30 9-18 * * 1-5
+Means:  At every 30 minutes past every hour from 9 through 18 on Monday through Friday
+
+# Add to crontab
+$ crontab -e
+*/30 9-18 * * 1-5 df -h | mail -s "Disk Usage" admin@company.com
+```
+
+### Inherited crontab archaeology
+```bash
+# Found this in production crontab, no idea what it means
+$ crontab -l | grep "23 5"
+23 5 */2 * *  /opt/scripts/mystery-job.sh
+
+$ cron-explain "23 5 */2 * *"
+Input:  23 5 */2 * *
+Output: At 05:23 on every 2nd day-of-month
+
+# Oh, it runs every other day at 5:23am. Still don't know why 5:23 specifically.
+# Probably someone's birthday or they mashed the keyboard.
+```
+
+### SSL certificate renewal
+```bash
+# Certbot renewal: once a week should be enough
+$ cron-explain "every Sunday at 3am"
+Input:  every Sunday at 3am
+Cron:   0 3 * * 0
+Means:  At 03:00 on Sunday
+
+# Add to crontab
+$ crontab -e
+0 3 * * 0 certbot renew --quiet && systemctl reload nginx
+```
+
+### Log rotation nightmare
+```bash
+# Boss: "Why are our logs 500GB?"
+# You: *checks crontab*
+$ crontab -l
+0 0 * * * /usr/bin/rotate-logs.sh
+
+$ cron-explain "0 0 * * *"
+Input:  0 0 * * *
+Output: At 00:00
+
+# Ah, it runs daily. Should be more frequent.
+$ cron-explain "every 6 hours"
+Input:  every 6 hours
+Cron:   0 */6 * * *
+Means:  At minute 0 past every 6th hour
+
+# Update crontab
+$ crontab -e
+0 */6 * * * /usr/bin/rotate-logs.sh
+```
+
+### Microservice health checks
+```bash
+# Check if services are alive every 5 minutes
+$ cron-explain "every 5 minutes"
+Input:  every 5 minutes
+Cron:   */5 * * * *
+Means:  At every 5 minutes
+
+$ crontab -e
+*/5 * * * * curl -f http://localhost:3000/health || systemctl restart myapp
+```
+
+### Monthly billing reports
+```bash
+# Finance wants reports on first of month, 9am sharp
+$ cron-explain "first day of every month at 9am"
+Input:  first day of every month at 9am
+Cron:   0 9 1 * *
+Means:  At 09:00 on day-of-month 1
+
+$ crontab -e
+0 9 1 * * /opt/billing/generate-report.sh | mail -s "Monthly Report" finance@company.com
+```
+
+### Dev environment cleanup
+```bash
+# Clean up old docker containers every Friday evening
+$ cron-explain "every Friday at 6pm"
+Input:  every Friday at 6pm
+Cron:   0 18 * * 5
+Means:  At 18:00 on Friday
+
+$ crontab -e
+0 18 * * 5 docker system prune -af --volumes
+```
+
+### Cache warming before traffic spike
+```bash
+# E-commerce site: warm cache before morning rush (8am) and lunch (noon)
+$ cron-explain "0 8,12 * * *"
+Input:  0 8,12 * * *
+Output: At 08:00 and 12:00
+
+# Perfect, that's what we want
+$ crontab -e
+0 8,12 * * * curl -X POST https://api.shop.com/cache/warm
+```
+
+### Debugging why job didn't run
+```bash
+# Job was supposed to run yesterday at 2pm but didn't
+$ crontab -l | grep report
+0 14 * * 1-5 /home/user/daily-report.sh
+
+$ cron-explain "0 14 * * 1-5"
+Input:  0 14 * * 1-5
+Output: At 14:00 on Monday through Friday
+
+# OH. Yesterday was Saturday. Weekdays only. That explains it.
+```
+
+### One-time reminder (cron isn't the right tool but...)
+```bash
+# Wrong approach - don't actually do this
+$ cron-explain "at 3pm today"
+Error: Cron doesn't support one-time jobs or specific dates
+
+# Use 'at' command instead:
+$ echo "/home/user/reminder.sh" | at 3pm today
+
+# Or for actual recurring schedule:
+$ cron-explain "every weekday at 3pm"
+Input:  every weekday at 3pm
+Cron:   0 15 * * 1-5
+Means:  At 15:00 on Monday through Friday
+```
+
+### Testing your cron schedule
+```bash
+# Want to make sure this runs right
+$ cron-explain "0 2 15 * *"
+Input:  0 2 15 * *
+Output: At 02:00 on day-of-month 15
+
+# Verify: 2am on the 15th of every month? Yes!
+# Add it
+$ crontab -e
+0 2 15 * * /opt/monthly-cleanup.sh
+
+# Check cron will actually run it
+$ crontab -l
+0 2 15 * * /opt/monthly-cleanup.sh
+
+# Force a test run (don't wait for the 15th)
+$ /opt/monthly-cleanup.sh
+```
+
 ## Use Cases
 
 - Writing cron jobs for CI/CD
@@ -269,6 +443,8 @@ Please include examples of the patterns you're adding support for.
 - Teaching/learning cron syntax
 - Documenting scheduled operations
 - Validating cron expressions before deployment
+- Debugging why scheduled jobs didn't run
+- Converting human-readable schedules to cron format
 
 ## License
 
