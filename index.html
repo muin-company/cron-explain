@@ -276,17 +276,20 @@
       }
 
       if (hour === '*') {
-        return buildFieldDescription(minute, 'minute', 'minute') + ' past every hour';
+        const minDesc = buildFieldDescription(minute, 'minute', 'minutes');
+        return minDesc + ' past every hour';
       }
 
-      const hourDesc = buildFieldDescription(hour, 'hour');
-      const minuteDesc = minute === '0' ? '' : ':' + minute.padStart(2, '0');
-
+      const hourDesc = buildFieldDescription(hour, 'hour', 'hours');
+      
       if (hourDesc.includes(',') || hourDesc.includes('-') || hourDesc.includes('/')) {
-        return minuteDesc ? `minute ${minute} past ${hourDesc}` : hourDesc;
+        const minuteDesc = minute === '0' ? '' : `:${minute.padStart(2, '0')}`;
+        return minuteDesc ? `${minuteDesc.slice(1)} minutes past ${hourDesc}` : hourDesc;
       }
 
-      return `${hour.padStart(2, '0')}${minuteDesc || ':00'}`;
+      // Simple time format
+      const minuteDesc = minute === '0' ? ':00' : ':' + minute.padStart(2, '0');
+      return `${hour.padStart(2, '0')}${minuteDesc}`;
     }
 
     function buildDateDescription(day, month, weekday) {
@@ -343,6 +346,11 @@
         return values.slice(0, -1).join(', ') + ' and ' + values[values.length - 1];
       }
 
+      // Single value - pad minutes/hours
+      if ((singular === 'minute' || singular === 'hour') && field.length === 1) {
+        return field.padStart(2, '0');
+      }
+      
       return field;
     }
 
