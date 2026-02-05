@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cron Explain - Cron Expression Converter</title>
+  <meta name="description" content="Convert cron expressions to human-readable text and vice versa. Free online cron converter tool for developers.">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      font-size: 2em;
+      margin-bottom: 10px;
+      color: #222;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .input-group {
+      margin-bottom: 20px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      font-family: 'Courier New', monospace;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #4a90e2;
+    }
+
+    .result {
+      background: #f9f9f9;
+      padding: 15px;
+      border-radius: 4px;
+      border-left: 4px solid #4a90e2;
+      margin-top: 20px;
+      font-family: 'Courier New', monospace;
+      position: relative;
+      min-height: 50px;
+    }
+
+    .result.empty {
+      color: #999;
+      font-style: italic;
+    }
+
+    .result.error {
+      border-left-color: #e74c3c;
+      color: #e74c3c;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 6px 12px;
+      background: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .copy-btn:hover {
+      background: #357abd;
+    }
+
+    .copy-btn:active {
+      transform: scale(0.95);
+    }
+
+    .examples {
+      margin-top: 40px;
+      padding-top: 30px;
+      border-top: 1px solid #eee;
+    }
+
+    .examples h2 {
+      font-size: 1.3em;
+      margin-bottom: 15px;
+      color: #333;
+    }
+
+    .example-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .example-item {
+      padding: 10px 15px;
+      background: #f9f9f9;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+      border: 1px solid #eee;
+    }
+
+    .example-item:hover {
+      background: #f0f0f0;
+    }
+
+    .example-item code {
+      color: #4a90e2;
+      font-family: 'Courier New', monospace;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .example-item span {
+      color: #666;
+      font-size: 0.9em;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #999;
+      font-size: 0.9em;
+    }
+
+    footer a {
+      color: #4a90e2;
+      text-decoration: none;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 1.5em;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Cron Explain</h1>
+    <p class="subtitle">Convert cron expressions to natural language and back</p>
+
+    <div class="input-group">
+      <textarea 
+        id="input" 
+        placeholder="Try: 0 5 * * 1  or  every Monday at 5am"
+        autofocus
+      ></textarea>
+    </div>
+
+    <div id="result" class="result empty">
+      Type something above to see the conversion
+    </div>
+
+    <div class="examples">
+      <h2>Common Examples</h2>
+      <div class="example-grid">
+        <div class="example-item" onclick="tryExample('* * * * *')">
+          <code>* * * * *</code>
+          <span>Every minute</span>
+        </div>
+        <div class="example-item" onclick="tryExample('*/15 * * * *')">
+          <code>*/15 * * * *</code>
+          <span>Every 15 minutes</span>
+        </div>
+        <div class="example-item" onclick="tryExample('0 * * * *')">
+          <code>0 * * * *</code>
+          <span>Every hour</span>
+        </div>
+        <div class="example-item" onclick="tryExample('0 0 * * *')">
+          <code>0 0 * * *</code>
+          <span>Every day at midnight</span>
+        </div>
+        <div class="example-item" onclick="tryExample('0 9 * * 1-5')">
+          <code>0 9 * * 1-5</code>
+          <span>Every weekday at 9am</span>
+        </div>
+        <div class="example-item" onclick="tryExample('0 5 * * 1')">
+          <code>0 5 * * 1</code>
+          <span>Every Monday at 5am</span>
+        </div>
+        <div class="example-item" onclick="tryExample('0 0 1 * *')">
+          <code>0 0 1 * *</code>
+          <span>First day of every month</span>
+        </div>
+        <div class="example-item" onclick="tryExample('@daily')">
+          <code>@daily</code>
+          <span>Preset - once per day</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Open source - <a href="https://github.com/muinmomin/cron-explain" target="_blank">GitHub</a></p>
+  </footer>
+
+  <script>
+    // Embed the cron-parser logic
+    const PRESETS = {
+      '@yearly': '0 0 1 1 *',
+      '@annually': '0 0 1 1 *',
+      '@monthly': '0 0 1 * *',
+      '@weekly': '0 0 * * 0',
+      '@daily': '0 0 * * *',
+      '@midnight': '0 0 * * *',
+      '@hourly': '0 * * * *'
+    };
+
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    function parseCronExpression(cron) {
+      if (cron.startsWith('@')) {
+        const preset = PRESETS[cron.toLowerCase()];
+        if (preset) {
+          return parseCronExpression(preset);
+        }
+        throw new Error(`Unknown preset: ${cron}`);
+      }
+
+      const parts = cron.trim().split(/\s+/);
+      if (parts.length !== 5) {
+        throw new Error('Cron expression must have exactly 5 fields: minute hour day month weekday');
+      }
+
+      const [minute, hour, day, month, weekday] = parts;
+      let desc = 'At';
+
+      const timeDesc = buildTimeDescription(minute, hour);
+      desc += ' ' + timeDesc;
+
+      const dateDesc = buildDateDescription(day, month, weekday);
+      if (dateDesc) {
+        desc += ' ' + dateDesc;
+      }
+
+      return desc;
+    }
+
+    function buildTimeDescription(minute, hour) {
+      if (minute === '*' && hour === '*') {
+        return 'every minute';
+      }
+
+      if (hour === '*') {
+        return buildFieldDescription(minute, 'minute', 'minute') + ' past every hour';
+      }
+
+      const hourDesc = buildFieldDescription(hour, 'hour');
+      const minuteDesc = minute === '0' ? '' : ':' + minute.padStart(2, '0');
+
+      if (hourDesc.includes(',') || hourDesc.includes('-') || hourDesc.includes('/')) {
+        return minuteDesc ? `minute ${minute} past ${hourDesc}` : hourDesc;
+      }
+
+      return `${hour.padStart(2, '0')}${minuteDesc || ':00'}`;
+    }
+
+    function buildDateDescription(day, month, weekday) {
+      const parts = [];
+
+      if (day !== '*') {
+        const dayDesc = buildFieldDescription(day, 'day', 'day of month');
+        parts.push('on ' + dayDesc);
+      }
+
+      if (month !== '*') {
+        const monthDesc = buildMonthDescription(month);
+        parts.push('in ' + monthDesc);
+      }
+
+      if (weekday !== '*') {
+        const weekdayDesc = buildWeekdayDescription(weekday);
+        if (day === '*') {
+          parts.push('on ' + weekdayDesc);
+        } else {
+          parts.push('if it\'s ' + weekdayDesc);
+        }
+      }
+
+      return parts.join(' ');
+    }
+
+    function buildFieldDescription(field, singular, plural = singular + 's') {
+      if (field === '*') {
+        return 'every ' + singular;
+      }
+
+      if (field.includes('*/')) {
+        const step = field.split('*/')[1];
+        return `every ${step} ${plural}`;
+      }
+
+      if (field.includes('/')) {
+        const [range, step] = field.split('/');
+        const [start, end] = range.split('-');
+        return `every ${step} ${plural} from ${start} through ${end}`;
+      }
+
+      if (field.includes('-')) {
+        const [start, end] = field.split('-');
+        return `${start}-${end}`;
+      }
+
+      if (field.includes(',')) {
+        const values = field.split(',');
+        if (values.length === 2) {
+          return `${values[0]} and ${values[1]}`;
+        }
+        return values.slice(0, -1).join(', ') + ' and ' + values[values.length - 1];
+      }
+
+      return field;
+    }
+
+    function buildMonthDescription(month) {
+      if (month.includes(',')) {
+        const months = month.split(',').map(m => MONTHS[parseInt(m) - 1] || m);
+        if (months.length === 2) {
+          return `${months[0]} and ${months[1]}`;
+        }
+        return months.slice(0, -1).join(', ') + ' and ' + months[months.length - 1];
+      }
+
+      if (month.includes('-')) {
+        const [start, end] = month.split('-');
+        return `${MONTHS[parseInt(start) - 1]}-${MONTHS[parseInt(end) - 1]}`;
+      }
+
+      const monthNum = parseInt(month);
+      return MONTHS[monthNum - 1] || month;
+    }
+
+    function buildWeekdayDescription(weekday) {
+      if (weekday.includes(',')) {
+        const days = weekday.split(',').map(d => DAYS[parseInt(d)] || d);
+        if (days.length === 2) {
+          return `${days[0]} and ${days[1]}`;
+        }
+        return days.slice(0, -1).join(', ') + ' and ' + days[days.length - 1];
+      }
+
+      if (weekday.includes('-')) {
+        const [start, end] = weekday.split('-');
+        return `${DAYS[parseInt(start)]}-${DAYS[parseInt(end)]}`;
+      }
+
+      const dayNum = parseInt(weekday);
+      return DAYS[dayNum] || weekday;
+    }
+
+    function naturalLanguageToCron(text) {
+      text = text.toLowerCase().trim();
+
+      if (text.match(/every (minute|hour|day|week|month|year)/)) {
+        if (text.includes('minute')) return '* * * * *';
+        if (text.includes('hour')) return '0 * * * *';
+        if (text.includes('day')) return '0 0 * * *';
+        if (text.includes('week')) return '0 0 * * 0';
+        if (text.includes('month')) return '0 0 1 * *';
+        if (text.includes('year')) return '0 0 1 1 *';
+      }
+
+      let minute = '*', hour = '*', day = '*', month = '*', weekday = '*';
+
+      const timeMatch = text.match(/(\d+):(\d+)/);
+      if (timeMatch) {
+        hour = timeMatch[1];
+        minute = timeMatch[2];
+      } else {
+        const hourMatch = text.match(/(\d+)\s*(am|pm)/);
+        if (hourMatch) {
+          let h = parseInt(hourMatch[1]);
+          if (hourMatch[2] === 'pm' && h !== 12) h += 12;
+          if (hourMatch[2] === 'am' && h === 12) h = 0;
+          hour = h.toString();
+          minute = '0';
+        }
+      }
+
+      DAYS.forEach((dayName, index) => {
+        if (text.includes(dayName.toLowerCase())) {
+          weekday = index.toString();
+        }
+      });
+
+      MONTHS.forEach((monthName, index) => {
+        if (text.includes(monthName.toLowerCase())) {
+          month = (index + 1).toString();
+        }
+      });
+
+      const everyMinMatch = text.match(/every (\d+) minutes?/);
+      if (everyMinMatch) {
+        minute = `*/${everyMinMatch[1]}`;
+        hour = '*';
+        day = '*';
+        month = '*';
+        weekday = '*';
+      }
+
+      const everyHourMatch = text.match(/every (\d+) hours?/);
+      if (everyHourMatch) {
+        minute = '0';
+        hour = `*/${everyHourMatch[1]}`;
+      }
+
+      return `${minute} ${hour} ${day} ${month} ${weekday}`;
+    }
+
+    function isCronExpression(input) {
+      input = input.trim();
+      
+      if (input.startsWith('@')) {
+        return true;
+      }
+
+      const cronPattern = /^[0-9\*\-\,\/\s]+$/;
+      const parts = input.split(/\s+/);
+      
+      return parts.length === 5 && cronPattern.test(input);
+    }
+
+    function convert(input) {
+      input = input.trim();
+      
+      if (isCronExpression(input)) {
+        return {
+          type: 'cron-to-natural',
+          input: input,
+          output: parseCronExpression(input)
+        };
+      } else {
+        return {
+          type: 'natural-to-cron',
+          input: input,
+          output: naturalLanguageToCron(input)
+        };
+      }
+    }
+
+    // UI logic
+    const inputEl = document.getElementById('input');
+    const resultEl = document.getElementById('result');
+    let currentOutput = '';
+
+    inputEl.addEventListener('input', handleInput);
+
+    function handleInput() {
+      const value = inputEl.value.trim();
+      
+      if (!value) {
+        resultEl.className = 'result empty';
+        resultEl.textContent = 'Type something above to see the conversion';
+        currentOutput = '';
+        return;
+      }
+
+      try {
+        const result = convert(value);
+        currentOutput = result.output;
+        
+        if (result.type === 'cron-to-natural') {
+          resultEl.className = 'result';
+          resultEl.innerHTML = `
+            ${result.output}
+            <button class="copy-btn" onclick="copyToClipboard()">Copy</button>
+          `;
+        } else {
+          const explanation = parseCronExpression(result.output);
+          resultEl.className = 'result';
+          resultEl.innerHTML = `
+            <strong>Cron:</strong> ${result.output}<br>
+            <strong>Means:</strong> ${explanation}
+            <button class="copy-btn" onclick="copyToClipboard()">Copy</button>
+          `;
+        }
+      } catch (error) {
+        resultEl.className = 'result error';
+        resultEl.textContent = error.message;
+        currentOutput = '';
+      }
+    }
+
+    function tryExample(example) {
+      inputEl.value = example;
+      handleInput();
+      inputEl.focus();
+    }
+
+    function copyToClipboard() {
+      if (!currentOutput) return;
+      
+      navigator.clipboard.writeText(currentOutput).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => {
+          btn.textContent = originalText;
+        }, 1500);
+      });
+    }
+  </script>
+</body>
+</html>

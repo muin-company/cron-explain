@@ -1,0 +1,30 @@
+{
+  "name": "cron-explain",
+  "version": "1.0.0",
+  "description": "Convert cron expressions to natural language and vice versa",
+  "main": "cron-parser.js",
+  "bin": {
+    "cron-explain": "./cli.js"
+  },
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "cron",
+    "crontab",
+    "parser",
+    "converter",
+    "natural language",
+    "cli",
+    "schedule"
+  ],
+  "author": "Muin Momin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/muinmomin/cron-explain"
+  },
+  "engines": {
+    "node": ">=12.0.0"
+  }
+}
