@@ -854,6 +854,672 @@ $ date +\%Z
 - Debugging why scheduled jobs didn't run
 - Converting human-readable schedules to cron format
 
+---
+
+## Integration Examples
+
+### npm Scripts
+
+Add helpful scripts to `package.json`:
+
+```json
+{
+  "scripts": {
+    "cron:explain": "cron-explain",
+    "cron:validate": "cron-explain --examples",
+    "cron:help": "cron-explain -h"
+  }
+}
+```
+
+Usage:
+```bash
+npm run cron:explain "0 5 * * 1"
+npm run cron:validate
+```
+
+---
+
+### Pre-commit Hook - Validate Crontab
+
+Prevent invalid cron expressions from being committed:
+
+```bash
+#!/bin/bash
+# .git/hooks/pre-commit
+
+# Check if crontab files were modified
+if git diff --cached --name-only | grep -q "crontab\|.cron"; then
+  echo "🔍 Validating cron expressions..."
+  
+  # Extract cron expressions from staged files
+  git diff --cached | grep "^+" | grep -E "^\+[0-9\*]" | while read line; do
+    cron_expr=$(echo "$line" | sed 's/^+//' | awk '{print $1,$2,$3,$4,$5}')
+    
+    # Validate with cron-explain
+    if ! cron-explain "$cron_expr" > /dev/null 2>&1; then
+      echo "❌ Invalid cron expression: $cron_expr"
+      exit 1
+    else
+      meaning=$(cron-explain "$cron_expr" | grep "Output:")
+      echo "✅ Valid: $cron_expr → $meaning"
+    fi
+  done
+fi
+
+echo "✅ Cron expressions validated"
+exit 0
+```
+
+---
+
+### GitHub Actions - Document Cron Jobs
+
+Auto-generate documentation for scheduled workflows:
+
+```yaml
+# .github/workflows/document-crons.yml
+name: Document Cron Jobs
+
+on:
+  push:
+    paths:
+      - '.github/workflows/*.yml'
+
+jobs:
+  document:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install cron-explain
+        run: npm install -g cron-explain
+      
+      - name: Extract and explain cron schedules
+        run: |
+          echo "# Scheduled Workflows" > docs/SCHEDULES.md
+          echo "Auto-generated: $(date)" >> docs/SCHEDULES.md
+          echo "" >> docs/SCHEDULES.md
+          
+          for workflow in .github/workflows/*.yml; do
+            # Extract cron expressions
+            grep -A1 "schedule:" "$workflow" | grep "cron:" | while read line; do
+              workflow_name=$(basename "$workflow" .yml)
+              cron_expr=$(echo "$line" | sed "s/.*cron: *['\"]//;s/['\"].*//" | tr -d "'\"")
+              
+              echo "## $workflow_name" >> docs/SCHEDULES.md
+              echo "\`\`\`" >> docs/SCHEDULES.md
+              echo "$cron_expr" >> docs/SCHEDULES.md
+              echo "\`\`\`" >> docs/SCHEDULES.md
+              
+              cron-explain "$cron_expr" >> docs/SCHEDULES.md
+              echo "" >> docs/SCHEDULES.md
+            done
+          done
+      
+      - name: Commit documentation
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add docs/SCHEDULES.md
+          git diff --staged --quiet || git commit -m "docs: update cron schedules"
+          git push
+```
+
+**Generated docs/SCHEDULES.md example:**
+```markdown
+# Scheduled Workflows
+Auto-generated: 2026-02-07
+
+## backup-database
+```
+0 2 * * *
+```
+Input:  0 2 * * *
+Output: At 02:00
+
+## weekly-report
+```
+0 9 * * 1
+```
+Input:  0 9 * * 1
+Output: At 09:00 on Monday
+```
+
+---
+
+### VS Code Snippet
+
+Add to `.vscode/snippets.code-snippets`:
+
+```json
+{
+  "Cron Expression with Explanation": {
+    "prefix": "cron",
+    "body": [
+      "# ${1:Description}",
+      "# Cron: ${2:0 0 * * *}",
+      "# Runs: ${3:Every day at midnight}",
+      "${2:0 0 * * *} ${4:command}"
+    ],
+    "description": "Insert cron job with explanation"
+  }
+}
+```
+
+Usage: Type `cron` and press Tab to expand template.
+
+---
+
+### Shell Alias for Quick Access
+
+Add to `~/.bashrc` or `~/.zshrc`:
+
+```bash
+# Explain cron expression
+alias cronx='cron-explain'
+
+# Generate cron from natural language
+alias cron-gen='cron-explain'
+
+# Validate current crontab
+alias cron-check='crontab -l | grep -v "^#" | awk "{print \$1,\$2,\$3,\$4,\$5}" | while read c; do cron-explain "$c" || echo "Invalid: $c"; done'
+
+# Show examples
+alias cron-examples='cron-explain --examples'
+```
+
+Usage:
+```bash
+cronx "0 5 * * 1"
+cron-gen "every Monday at 5am"
+cron-check
+```
+
+---
+
+### Systemd Timer Helper
+
+Convert cron to systemd timer format:
+
+```bash
+#!/bin/bash
+# cron-to-systemd.sh
+
+cron_expr="$1"
+service_name="$2"
+
+if [ -z "$cron_expr" ] || [ -z "$service_name" ]; then
+  echo "Usage: ./cron-to-systemd.sh '<cron>' <service-name>"
+  exit 1
+fi
+
+# Explain the cron
+explanation=$(cron-explain "$cron_expr" | grep "Output:" | sed 's/Output: //')
+
+# Convert to OnCalendar format (simplified)
+# This is a basic converter - systemd calendar format is more complex
+
+read min hour dom mon dow <<< $(echo "$cron_expr")
+
+calendar=""
+if [ "$min" != "*" ] && [ "$hour" != "*" ]; then
+  calendar="*-*-* $hour:$min:00"
+elif [ "$hour" != "*" ]; then
+  calendar="*-*-* $hour:*:00"
+fi
+
+# Generate systemd timer
+cat > "${service_name}.timer" <<EOF
+[Unit]
+Description=$explanation
+Requires=${service_name}.service
+
+[Timer]
+OnCalendar=$calendar
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+echo "✓ Created ${service_name}.timer"
+echo "  Cron: $cron_expr"
+echo "  Meaning: $explanation"
+echo "  OnCalendar: $calendar"
+echo ""
+echo "Next steps:"
+echo "  sudo cp ${service_name}.timer /etc/systemd/system/"
+echo "  sudo systemctl daemon-reload"
+echo "  sudo systemctl enable ${service_name}.timer"
+echo "  sudo systemctl start ${service_name}.timer"
+```
+
+Usage:
+```bash
+./cron-to-systemd.sh "0 2 * * *" backup
+# Creates backup.timer with systemd format
+```
+
+---
+
+### Kubernetes CronJob Generator
+
+Generate Kubernetes CronJob manifests with explanations:
+
+```bash
+#!/bin/bash
+# k8s-cronjob-gen.sh
+
+cron_expr="$1"
+job_name="$2"
+image="$3"
+command="$4"
+
+explanation=$(cron-explain "$cron_expr" | grep "Output:" | sed 's/Output: //')
+
+cat <<EOF > "${job_name}-cronjob.yaml"
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: $job_name
+spec:
+  # $explanation
+  schedule: "$cron_expr"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: $job_name
+            image: $image
+            command: ["$command"]
+          restartPolicy: OnFailure
+EOF
+
+echo "✓ Created ${job_name}-cronjob.yaml"
+echo "  Schedule: $cron_expr ($explanation)"
+```
+
+Usage:
+```bash
+./k8s-cronjob-gen.sh "0 2 * * *" backup-db postgres:15 /backup.sh
+```
+
+---
+
+### Docker Compose with Cron Services
+
+Document cron schedules in docker-compose.yml:
+
+```yaml
+version: '3.8'
+
+services:
+  # Main app
+  app:
+    image: myapp:latest
+    ports:
+      - "3000:3000"
+  
+  # Cron runner
+  cron:
+    image: alpine:latest
+    command: crond -f
+    volumes:
+      - ./crontab:/etc/crontabs/root
+    labels:
+      # Document cron schedules using labels
+      cron.backup: "0 2 * * * - At 02:00 (daily backups)"
+      cron.cleanup: "0 0 * * 0 - At 00:00 on Sunday (weekly cleanup)"
+      cron.reports: "0 9 1 * * - At 09:00 on day 1 (monthly reports)"
+```
+
+Extract and validate:
+```bash
+# Validate all cron expressions in docker-compose.yml
+docker-compose config | grep "cron\." | while read label; do
+  cron_expr=$(echo "$label" | cut -d: -f2 | awk '{print $1,$2,$3,$4,$5}')
+  echo "Checking: $cron_expr"
+  cron-explain "$cron_expr" || echo "❌ Invalid: $cron_expr"
+done
+```
+
+---
+
+### Ansible Playbook Integration
+
+Validate cron jobs before deployment:
+
+```yaml
+# playbooks/setup-cron.yml
+---
+- name: Setup Cron Jobs
+  hosts: all
+  tasks:
+    - name: Validate cron expressions
+      local_action:
+        module: shell
+        cmd: "cron-explain '{{ item.schedule }}'"
+      loop:
+        - { name: "backup", schedule: "0 2 * * *", job: "/opt/backup.sh" }
+        - { name: "cleanup", schedule: "0 0 * * 0", job: "/opt/cleanup.sh" }
+      register: cron_validation
+      failed_when: cron_validation.rc != 0
+    
+    - name: Install validated cron jobs
+      cron:
+        name: "{{ item.name }}"
+        minute: "{{ item.schedule.split()[0] }}"
+        hour: "{{ item.schedule.split()[1] }}"
+        day: "{{ item.schedule.split()[2] }}"
+        month: "{{ item.schedule.split()[3] }}"
+        weekday: "{{ item.schedule.split()[4] }}"
+        job: "{{ item.job }}"
+      loop:
+        - { name: "backup", schedule: "0 2 * * *", job: "/opt/backup.sh" }
+        - { name: "cleanup", schedule: "0 0 * * 0", job: "/opt/cleanup.sh" }
+```
+
+---
+
+### CI/CD Cron Linter
+
+Add to CI pipeline to validate all cron expressions:
+
+```yaml
+# .gitlab-ci.yml
+lint-crons:
+  stage: validate
+  script:
+    - npm install -g cron-explain
+    - |
+      # Find all cron expressions in repo
+      grep -r -E "^[0-9\*].*\*.*\*" . --include="*.yml" --include="*.yaml" --include="crontab" | \
+      while IFS=: read file expr; do
+        echo "Checking $file"
+        cron_expr=$(echo "$expr" | awk '{print $1,$2,$3,$4,$5}')
+        if cron-explain "$cron_expr" > /dev/null 2>&1; then
+          echo "  ✅ Valid: $cron_expr"
+        else
+          echo "  ❌ Invalid: $cron_expr"
+          exit 1
+        fi
+      done
+```
+
+---
+
+### Terraform AWS EventBridge Integration
+
+Generate EventBridge cron rules with explanations:
+
+```hcl
+# terraform/cronjobs.tf
+
+# Validate cron before creating resource
+resource "null_resource" "validate_cron" {
+  provisioner "local-exec" {
+    command = "cron-explain '${var.backup_schedule}' || exit 1"
+  }
+}
+
+# Create EventBridge rule (uses cron format)
+resource "aws_cloudwatch_event_rule" "backup" {
+  name                = "daily-backup"
+  description         = "Daily backup at 2am (${var.backup_schedule})"
+  schedule_expression = "cron(${var.backup_schedule})"
+  
+  depends_on = [null_resource.validate_cron]
+}
+
+# variables.tf
+variable "backup_schedule" {
+  description = "Cron expression for backup schedule (validates with cron-explain)"
+  type        = string
+  default     = "0 2 * * *"  # At 02:00
+  
+  validation {
+    condition     = can(regex("^[0-9\\*].* .* .* .* .*$", var.backup_schedule))
+    error_message = "Must be valid cron expression. Use cron-explain to validate."
+  }
+}
+```
+
+---
+
+## Troubleshooting
+
+### "Error: Invalid cron expression"
+
+**Problem:** Cron expression has syntax errors.
+
+**Solution:**
+```bash
+# Check each field:
+# minute (0-59) hour (0-23) day (1-31) month (1-12) weekday (0-7)
+
+# Bad:
+cron-explain "60 5 * * *"
+# Error: Minute must be 0-59
+
+# Good:
+cron-explain "0 5 * * *"
+# Output: At 05:00
+
+# Common mistakes:
+cron-explain "5 0 * * *"   # 00:05, not 05:00
+cron-explain "0 25 * * *"  # Invalid: hour must be 0-23
+cron-explain "* * * * 8"   # Invalid: weekday must be 0-7
+```
+
+---
+
+### "Cannot convert natural language to cron"
+
+**Problem:** Natural language is too ambiguous or not supported.
+
+**Examples of what works:**
+```bash
+✅ cron-explain "every Monday at 5am"
+✅ cron-explain "every 15 minutes"
+✅ cron-explain "first day of month at midnight"
+✅ cron-explain "every weekday at 9am"
+```
+
+**Examples of what doesn't work:**
+```bash
+❌ cron-explain "next Tuesday"         # Cron is for recurring, not one-time
+❌ cron-explain "tomorrow at 3pm"      # Use 'at' command instead
+❌ cron-explain "when server load is low"  # No conditional logic
+❌ cron-explain "twice a week"         # Too vague, which days?
+```
+
+**Solution:** Be specific!
+```bash
+# Instead of "twice a week":
+cron-explain "every Monday and Thursday at 9am"
+
+# Instead of "next Tuesday" (use 'at' command):
+echo "command" | at 3pm next Tuesday
+```
+
+---
+
+### Cron Expression Works in cron-explain but Fails in Actual Cron
+
+**Problem:** Different cron implementations have different features.
+
+**Variations:**
+```bash
+# Standard cron (5 fields):
+0 5 * * 1-5    ✅ Works everywhere
+
+# Some systems support 6 fields (with seconds):
+0 0 5 * * 1-5  ❌ Not standard, may fail
+
+# Vixie cron supports @reboot:
+@reboot /script.sh  ✅ Works on most Linux
+
+# But some minimal systems don't:
+@reboot /script.sh  ❌ Fails on BusyBox/Alpine
+
+# Check your cron version:
+man cron  # or: crontab -l
+```
+
+**Solution:** Stick to standard 5-field format for portability.
+
+---
+
+### "Works in cron-explain but Job Doesn't Run"
+
+**Problem:** Valid syntax but environmental issues.
+
+**Debug checklist:**
+```bash
+# 1. Check cron daemon is running
+systemctl status cron     # Debian/Ubuntu
+systemctl status crond    # CentOS/RHEL
+brew services list | grep cron  # macOS
+
+# 2. Check crontab was saved
+crontab -l
+
+# 3. Check cron logs
+grep CRON /var/log/syslog  # Ubuntu/Debian
+grep CRON /var/log/cron    # CentOS/RHEL
+log stream --predicate 'process == "cron"' --info  # macOS
+
+# 4. Test the command manually
+/path/to/script.sh
+
+# 5. Check permissions
+ls -la /path/to/script.sh
+chmod +x /path/to/script.sh
+
+# 6. Use absolute paths in cron
+# ❌ node script.js
+# ✅ /usr/bin/node /home/user/script.js
+
+# 7. Set PATH in crontab
+PATH=/usr/local/bin:/usr/bin:/bin
+0 5 * * * node /home/user/script.js
+```
+
+---
+
+### Timezone Confusion
+
+**Problem:** Cron runs in different timezone than expected.
+
+**Solution:**
+```bash
+# Check server timezone
+timedatectl  # Linux
+date +%Z     # All systems
+
+# Set timezone in crontab (modern cron supports this)
+CRON_TZ=America/New_York
+0 9 * * 1-5 /opt/backup.sh
+
+# Or use UTC and calculate offset
+# Want 9am EST (UTC-5):
+0 14 * * 1-5 /opt/backup.sh  # 14:00 UTC = 9:00 EST
+
+# Verify with cron-explain
+cron-explain "0 14 * * 1-5"
+# Output: At 14:00 on Monday through Friday
+```
+
+---
+
+### Special Characters Not Working
+
+**Problem:** `%` or `*` in commands are interpreted by cron.
+
+**Solution:**
+```bash
+# % is special in cron (newline)
+# ❌ This fails:
+0 5 * * * curl http://example.com?param=value%20with%20space
+
+# ✅ Escape it:
+0 5 * * * curl http://example.com?param=value\%20with\%20space
+
+# Or use a script instead:
+0 5 * * * /opt/scripts/api-call.sh
+
+# For * in filenames, escape or quote:
+0 2 * * * find /tmp -name "*.log" -delete
+```
+
+---
+
+### Day of Month AND Day of Week Confusion
+
+**Problem:** Combining day of month and day of week doesn't work as expected.
+
+**Common mistake:**
+```bash
+# Want: First Monday of every month
+# Wrong:
+0 9 1 * 1
+# This runs: On the 1st of every month OR every Monday
+# Not: Only on 1st when it's a Monday
+
+# cron uses OR logic for day fields!
+```
+
+**Solution:**
+```bash
+# Use script with logic:
+0 9 1-7 * 1 /opt/first-monday-check.sh
+
+# first-monday-check.sh:
+#!/bin/bash
+if [ $(date +\%d) -le 7 ]; then
+  /opt/actual-task.sh
+fi
+
+# Or use explicit dates:
+cron-explain "0 9 1-7 * 1"
+# Output: At 09:00 on every day-of-month from 1 through 7 and on Monday
+# This catches the first Monday (1st-7th includes first week)
+```
+
+---
+
+### JSON Output Not Parsing
+
+**Problem:** JSON output is malformed or missing.
+
+**Solution:**
+```bash
+# Check version supports --json
+cron-explain --version
+
+# Valid JSON output:
+cron-explain "0 5 * * 1" --json | jq .
+# {
+#   "input": "0 5 * * 1",
+#   "type": "cron-to-natural",
+#   "cron": "0 5 * * 1",
+#   "natural": "At 05:00 on Monday",
+#   ...
+# }
+
+# If jq fails, check for extra output:
+cron-explain "0 5 * * 1" --json 2>/dev/null | jq .
+
+# Or update to latest version:
+npm update -g cron-explain
+```
+
+---
+
 ## License
 
 MIT
