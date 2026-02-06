@@ -110,6 +110,115 @@ $ cron-explain --examples
 
 Shows common patterns with explanations.
 
+## Examples
+
+### Example 1: Standard cron to English
+
+```bash
+$ cron-explain "0 5 * * 1"
+Input:  0 5 * * 1
+Output: At 05:00 on Monday
+
+$ cron-explain "*/15 * * * *"
+Input:  */15 * * * *
+Output: At every 15 minutes past every hour
+
+$ cron-explain "0 0 1 * *"
+Input:  0 0 1 * *
+Output: At 00:00 on day-of-month 1
+```
+
+### Example 2: Natural language to cron
+
+```bash
+$ cron-explain "every Monday at 5am"
+Input:  every Monday at 5am
+Cron:   0 5 * * 1
+Means:  At 05:00 on Monday
+
+$ cron-explain "every 30 minutes"
+Input:  every 30 minutes
+Cron:   */30 * * * *
+Means:  At every 30 minutes
+
+$ cron-explain "first day of month at midnight"
+Input:  first day of month at midnight
+Cron:   0 0 1 * *
+Means:  At 00:00 on day-of-month 1
+```
+
+### Example 3: Cron presets/shortcuts
+
+```bash
+$ cron-explain "@daily"
+Input:  @daily
+Output: At 00:00
+
+$ cron-explain "@hourly"
+Input:  @hourly
+Output: At minute 0
+
+$ cron-explain "@weekly"
+Input:  @weekly
+Output: At 00:00 on Sunday
+```
+
+### Example 4: Complex patterns with ranges
+
+```bash
+$ cron-explain "*/30 9-17 * * 1-5"
+Input:  */30 9-17 * * 1-5
+Output: At every 30 minutes past every hour from 9 through 17 on Monday through Friday
+
+$ cron-explain "0 9,12,15,18 * * *"
+Input:  0 9,12,15,18 * * *
+Output: At 09:00, 12:00, 15:00, and 18:00
+
+$ cron-explain "0 2 * * 0,6"
+Input:  0 2 * * 0,6
+Output: At 02:00 on Saturday and Sunday
+```
+
+### Example 5: Invalid/error cases
+
+```bash
+$ cron-explain "99 5 * * *"
+Error: Invalid cron expression
+  • Minute must be between 0-59 (got: 99)
+
+$ cron-explain "0 25 * * *"
+Error: Invalid cron expression
+  • Hour must be between 0-23 (got: 25)
+
+$ cron-explain "* * * * 8"
+Error: Invalid cron expression
+  • Day of week must be between 0-7 (got: 8)
+
+$ cron-explain "tomorrow at 3pm"
+Error: Cannot convert to cron
+  • Cron doesn't support specific dates, only recurring schedules
+  • Use the 'at' command for one-time scheduled tasks
+```
+
+### Example 6: Edge cases and tricky patterns
+
+```bash
+$ cron-explain "0 0 29-31 * *"
+Input:  0 0 29-31 * *
+Output: At 00:00 on every day-of-month from 29 through 31
+Note:   Will skip months with fewer than 29 days
+
+$ cron-explain "0 0 31 2 *"
+Input:  0 0 31 2 *
+Output: At 00:00 on day-of-month 31 in February
+Warning: This will never run (February has max 29 days)
+
+$ cron-explain "* * * * * *"
+Error: Invalid cron expression
+  • Standard cron uses 5 fields (minute hour day month weekday)
+  • Seconds are not supported in standard cron
+```
+
 ## Web Interface
 
 The web version includes:
