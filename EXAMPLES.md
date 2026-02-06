@@ -48,21 +48,92 @@ cron-explain "0 9 * * 1,5"
 # Output: At 09:00 on Monday and Friday
 ```
 
-## Natural Language to Cron
+## Natural Language to Cron (Reverse Mode)
+
+### Time-based patterns
 
 ```bash
-# Simple conversions
-cron-explain "every day"
-# Cron: 0 0 * * *
-
-cron-explain "every hour"
-# Cron: 0 * * * *
-
-cron-explain "every Monday at 5am"
-# Cron: 0 5 * * 1
-
+# Every X minutes/hours/days
 cron-explain "every 15 minutes"
 # Cron: */15 * * * *
+
+cron-explain "every 2 hours"
+# Cron: 0 */2 * * *
+
+cron-explain "every 3 days"
+# Cron: 0 0 */3 * *
+```
+
+### Time of day
+
+```bash
+# 12-hour format
+cron-explain "every day at 3am"
+# Cron: 0 3 * * *
+
+cron-explain "5pm every day"
+# Cron: 0 17 * * *
+
+# 24-hour format
+cron-explain "every day at 15:30"
+# Cron: 30 15 * * *
+
+# Special times
+cron-explain "noon every day"
+# Cron: 0 12 * * *
+
+cron-explain "midnight every day"
+# Cron: 0 0 * * *
+```
+
+### Weekday patterns
+
+```bash
+# Specific days
+cron-explain "every Monday at 9am"
+# Cron: 0 9 * * 1
+
+cron-explain "Friday at 5pm"
+# Cron: 0 17 * * 5
+
+# Weekday ranges
+cron-explain "weekdays at 9am"
+# Cron: 0 9 * * 1-5
+# Means: At 09:00 on Monday-Friday
+
+cron-explain "midnight on weekends"
+# Cron: 0 0 * * 0,6
+# Means: At 00:00 on Sunday and Saturday
+```
+
+### Day of month
+
+```bash
+# First/last of month
+cron-explain "first of the month"
+# Cron: 0 0 1 * *
+
+cron-explain "15th of every month"
+# Cron: 0 0 15 * *
+```
+
+### Preset shortcuts
+
+```bash
+cron-explain "hourly"
+# Cron: 0 * * * *
+
+cron-explain "daily"
+# Cron: 0 0 * * *
+
+cron-explain "weekly"
+# Cron: 0 0 * * 0
+
+cron-explain "monthly"
+# Cron: 0 0 1 * *
+
+cron-explain "yearly"
+# Cron: 0 0 1 1 *
 ```
 
 ## Presets

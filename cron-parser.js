@@ -174,63 +174,124 @@ function buildWeekdayDescription(weekday) {
 function naturalLanguageToCron(text) {
   text = text.toLowerCase().trim();
 
-  // Common presets
-  if (text.match(/every (minute|hour|day|week|month|year)/)) {
-    if (text.includes('minute')) return '* * * * *';
-    if (text.includes('hour')) return '0 * * * *';
-    if (text.includes('day')) return '0 0 * * *';
-    if (text.includes('week')) return '0 0 * * 0';
-    if (text.includes('month')) return '0 0 1 * *';
-    if (text.includes('year')) return '0 0 1 1 *';
-  }
+  // Preset shortcuts
+  const presets = {
+    'every minute': '* * * * *',
+    'every hour': '0 * * * *',
+    'hourly': '0 * * * *',
+    'every day': '0 0 * * *',
+    'daily': '0 0 * * *',
+    'every week': '0 0 * * 0',
+    'weekly': '0 0 * * 0',
+    'every month': '0 0 1 * *',
+    'monthly': '0 0 1 * *',
+    'every year': '0 0 1 1 *',
+    'yearly': '0 0 1 1 *',
+    'annually': '0 0 1 1 *'
+  };
 
-  // Extract components
-  let minute = '*', hour = '*', day = '*', month = '*', weekday = '*';
-
-  // Time patterns
-  const timeMatch = text.match(/(\d+):(\d+)/);
-  if (timeMatch) {
-    hour = timeMatch[1];
-    minute = timeMatch[2];
-  } else {
-    const hourMatch = text.match(/(\d+)\s*(am|pm)/);
-    if (hourMatch) {
-      let h = parseInt(hourMatch[1]);
-      if (hourMatch[2] === 'pm' && h !== 12) h += 12;
-      if (hourMatch[2] === 'am' && h === 12) h = 0;
-      hour = h.toString();
-      minute = '0';
+  for (const [key, value] of Object.entries(presets)) {
+    if (text === key || text.startsWith(key + ' ')) {
+      return value;
     }
   }
 
-  // Weekday patterns
+  // Initialize components
+  let minute = '*', hour = '*', day = '*', month = '*', weekday = '*';
+  let hasTime = false;
+
+  // Handle "every X minutes/hours/days" with intervals
+  const everyMinMatch = text.match(/every (\d+) minutes?/);
+  if (everyMinMatch) {
+    return `*/${everyMinMatch[1]} * * * *`;
+  }
+
+  const everyHourMatch = text.match(/every (\d+) hours?/);
+  if (everyHourMatch) {
+    return `0 */${everyHourMatch[1]} * * *`;
+  }
+
+  const everyDayMatch = text.match(/every (\d+) days?/);
+  if (everyDayMatch) {
+    return `0 0 */${everyDayMatch[1]} * *`;
+  }
+
+  // Special patterns: "noon", "midnight"
+  if (text.includes('noon')) {
+    hour = '12';
+    minute = '0';
+    hasTime = true;
+  } else if (text.includes('midnight')) {
+    hour = '0';
+    minute = '0';
+    hasTime = true;
+  }
+
+  // Parse time: "3am", "3pm", "15:30", "3:30pm" - do this BEFORE day parsing
+  const time24Match = text.match(/(\d{1,2}):(\d{2})/);
+  if (time24Match && !hasTime) {
+    hour = parseInt(time24Match[1]).toString();
+    minute = time24Match[2];
+    hasTime = true;
+  } else {
+    const time12Match = text.match(/(\d{1,2})\s*(am|pm)/);
+    if (time12Match && !hasTime) {
+      let h = parseInt(time12Match[1]);
+      if (time12Match[2] === 'pm' && h !== 12) h += 12;
+      if (time12Match[2] === 'am' && h === 12) h = 0;
+      hour = h.toString();
+      minute = '0';
+      hasTime = true;
+    }
+  }
+
+  // Parse weekday
   DAYS.forEach((dayName, index) => {
     if (text.includes(dayName.toLowerCase())) {
       weekday = index.toString();
     }
   });
 
-  // Month patterns
+  // Weekday ranges: "weekdays" (Mon-Fri), "weekends" (Sat-Sun)
+  if (text.includes('weekday')) {
+    weekday = '1-5';
+  } else if (text.includes('weekend')) {
+    weekday = '0,6';
+  }
+
+  // Parse month
   MONTHS.forEach((monthName, index) => {
     if (text.includes(monthName.toLowerCase())) {
       month = (index + 1).toString();
     }
   });
 
-  // Every X minutes/hours
-  const everyMinMatch = text.match(/every (\d+) minutes?/);
-  if (everyMinMatch) {
-    minute = `*/${everyMinMatch[1]}`;
-    hour = '*';
-    day = '*';
-    month = '*';
-    weekday = '*';
+  // Parse day of month: "first", "last", "15th" - ONLY if no time pattern matched
+  // This prevents "3am" from being interpreted as day 3
+  const dayNumMatch = text.match(/(\d{1,2})(st|nd|rd|th)( of)?( the)?( month)?/);
+  if (dayNumMatch && !hasTime) {
+    day = dayNumMatch[1];
+  } else if (text.includes('first') && text.includes('month')) {
+    day = '1';
+  } else if (text.includes('last') && text.includes('month')) {
+    day = '28-31'; // Approximate, cron doesn't have "last day"
   }
 
-  const everyHourMatch = text.match(/every (\d+) hours?/);
-  if (everyHourMatch) {
+  // Special patterns: "noon", "midnight"
+  if (text.includes('noon')) {
+    hour = '12';
     minute = '0';
-    hour = `*/${everyHourMatch[1]}`;
+    hasTime = true;
+  } else if (text.includes('midnight')) {
+    hour = '0';
+    minute = '0';
+    hasTime = true;
+  }
+
+  // If no time specified but has weekday/day, default to midnight
+  if (!hasTime && (weekday !== '*' || day !== '*' || month !== '*')) {
+    hour = '0';
+    minute = '0';
   }
 
   return `${minute} ${hour} ${day} ${month} ${weekday}`;
