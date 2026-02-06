@@ -110,6 +110,47 @@ $ cron-explain --examples
 
 Shows common patterns with explanations.
 
+### JSON Output
+
+For programmatic parsing and integration with other tools:
+
+```bash
+$ cron-explain --json "0 5 * * 1"
+{
+  "input": "0 5 * * 1",
+  "type": "cron-to-natural",
+  "success": true,
+  "cron": "0 5 * * 1",
+  "natural": "At 05:00 on Monday",
+  "description": "At 05:00 on Monday"
+}
+```
+
+```bash
+$ cron-explain --json "every Monday at 5am"
+{
+  "input": "every Monday at 5am",
+  "type": "natural-to-cron",
+  "success": true,
+  "natural": "every Monday at 5am",
+  "cron": "0 5 * * 1",
+  "description": "At 05:00 on Monday"
+}
+```
+
+Error handling in JSON mode:
+
+```bash
+$ cron-explain --json "invalid expression"
+{
+  "success": false,
+  "error": "Invalid cron expression",
+  "input": "invalid expression"
+}
+```
+
+Perfect for scripts, CI/CD pipelines, or building tools on top of cron-explain.
+
 ## Examples
 
 ### Example 1: Standard cron to English

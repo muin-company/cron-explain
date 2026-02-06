@@ -10,6 +10,7 @@ const HELP = `cron-explain - Convert between cron expressions and natural langua
 Usage:
   cron-explain "0 5 * * 1"              Convert cron to natural language
   cron-explain "every Monday at 5am"    Convert natural language to cron
+  cron-explain --json "0 5 * * 1"       Output in JSON format
   cron-explain --examples               Show common examples
   cron-explain --help                   Show this help
 
@@ -18,6 +19,7 @@ Examples:
   cron-explain "every 15 minutes"
   cron-explain "0 0 * * 0"
   cron-explain "@daily"
+  cron-explain --json "0 5 * * 1"       # JSON output for parsing
 `;
 
 const EXAMPLES = `Common Cron Patterns:
@@ -49,22 +51,55 @@ if (args.includes('--examples') || args.includes('-e')) {
   process.exit(0);
 }
 
-const input = args.join(' ');
+// Check for JSON output flag
+const jsonOutput = args.includes('--json') || args.includes('-j');
+const inputArgs = args.filter(arg => arg !== '--json' && arg !== '-j');
+const input = inputArgs.join(' ');
 
 try {
   const result = convert(input);
   
-  if (result.type === 'cron-to-natural') {
-    console.log(`Input:  ${result.input}`);
-    console.log(`Output: ${result.output}`);
+  if (jsonOutput) {
+    // JSON output mode
+    const jsonResult = {
+      input: result.input,
+      type: result.type,
+      success: true
+    };
+
+    if (result.type === 'cron-to-natural') {
+      jsonResult.cron = result.input;
+      jsonResult.natural = result.output;
+      jsonResult.description = result.output;
+    } else {
+      jsonResult.natural = result.input;
+      jsonResult.cron = result.output;
+      jsonResult.description = parseCronExpression(result.output);
+    }
+
+    console.log(JSON.stringify(jsonResult, null, 2));
   } else {
-    console.log(`Input:  ${result.input}`);
-    console.log(`Cron:   ${result.output}`);
-    // Also show what it means
-    const explanation = parseCronExpression(result.output);
-    console.log(`Means:  ${explanation}`);
+    // Human-readable output mode
+    if (result.type === 'cron-to-natural') {
+      console.log(`Input:  ${result.input}`);
+      console.log(`Output: ${result.output}`);
+    } else {
+      console.log(`Input:  ${result.input}`);
+      console.log(`Cron:   ${result.output}`);
+      // Also show what it means
+      const explanation = parseCronExpression(result.output);
+      console.log(`Means:  ${explanation}`);
+    }
   }
 } catch (error) {
-  console.error(`Error: ${error.message}`);
+  if (jsonOutput) {
+    console.log(JSON.stringify({
+      success: false,
+      error: error.message,
+      input: input
+    }, null, 2));
+  } else {
+    console.error(`Error: ${error.message}`);
+  }
   process.exit(1);
 }
