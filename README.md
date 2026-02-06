@@ -585,6 +585,264 @@ $ crontab -l
 $ /opt/monthly-cleanup.sh
 ```
 
+---
+
+### Example 11: Multi-environment deployment schedule
+
+**Scenario:** Different deployment schedules for staging vs production.
+
+```bash
+# Staging: Deploy automatically every night
+$ cron-explain "0 2 * * *"
+Input:  0 2 * * *
+Output: At 02:00
+
+# Add to staging crontab
+$ crontab -e
+0 2 * * * cd /app && git pull && npm install && pm2 restart all
+
+# Production: Only deploy on Sundays during maintenance window
+$ cron-explain "0 3 * * 0"
+Input:  0 3 * * 0
+Output: At 03:00 on Sunday
+
+# Add to production crontab (with notification)
+0 3 * * 0 /opt/deploy.sh && curl -X POST https://slack.com/webhook -d '{"text":"Production deployed"}'
+
+# Pre-deployment checks run 30 minutes before
+$ cron-explain "30 2 * * 0"
+Input:  30 2 * * 0
+Output: At 02:30 on Sunday
+
+30 2 * * 0 /opt/pre-deploy-checks.sh || echo "Pre-checks failed" | mail -s "Deploy Alert" ops@company.com
+```
+
+---
+
+### Example 12: Rate limit / throttling pattern
+
+**Scenario:** API has rate limits. Space out jobs to avoid hitting limits.
+
+```bash
+# Bad: All jobs fire at midnight (stampede!)
+$ crontab -l
+0 0 * * * /opt/sync-users.sh
+0 0 * * * /opt/sync-orders.sh
+0 0 * * * /opt/sync-products.sh
+0 0 * * * /opt/sync-reviews.sh
+
+# Good: Stagger jobs every 15 minutes
+$ cron-explain "0,15,30,45 0 * * *"
+Input:  0,15,30,45 0 * * *
+Output: At minute 0, 15, 30, and 45 past hour 0
+
+# Better crontab:
+0  0 * * * /opt/sync-users.sh      # 00:00
+15 0 * * * /opt/sync-orders.sh     # 00:15
+30 0 * * * /opt/sync-products.sh   # 00:30
+45 0 * * * /opt/sync-reviews.sh    # 00:45
+
+# Alternative: Use systemd timers with RandomizedDelaySec
+# Or add sleep with random jitter in the script:
+0 0 * * * sleep $((RANDOM \% 300)) && /opt/sync-users.sh
+```
+
+---
+
+### Example 13: Conditional execution based on day of month
+
+**Scenario:** First workday of month vs. all other workdays.
+
+```bash
+# Every weekday at 9am
+$ cron-explain "0 9 * * 1-5"
+Input:  0 9 * * 1-5
+Output: At 09:00 on Monday through Friday
+
+# First 7 days of month (catches first weekday)
+$ cron-explain "0 9 1-7 * 1-5"
+Input:  0 9 1-7 * 1-5
+Output: At 09:00 on every day-of-month from 1 through 7 and on Monday through Friday
+
+# But this runs multiple times if 1st-7th has multiple weekdays!
+# Better: Use a script with logic
+
+# monthly-report-cron.sh:
+#!/bin/bash
+DAY=$(date +\%d)
+DOW=$(date +\%u)  # 1=Monday, 7=Sunday
+
+# First weekday of month
+if [ $DAY -le 3 ] && [ $DOW -eq 1 ]; then
+    /opt/generate-monthly-report.sh
+# Or if today is the 1st and it's a weekday
+elif [ $DAY -eq 1 ] && [ $DOW -le 5 ]; then
+    /opt/generate-monthly-report.sh
+fi
+
+# Then just run daily:
+0 9 * * 1-5 /opt/monthly-report-cron.sh
+
+# Alternative: Use 'at' command for next first weekday
+# In Dec 31st cron:
+0 23 31 12 * echo "/opt/monthly-report.sh" | at 9am "next monday"
+```
+
+---
+
+### Example 14: Debugging cron with logging
+
+**Scenario:** Cron job isn't running, or it's running but failing silently.
+
+```bash
+# Bad: No output, no logs
+0 2 * * * /opt/backup.sh
+
+# Better: Redirect to log file
+0 2 * * * /opt/backup.sh >> /var/log/backup.log 2>&1
+
+# Best: Timestamps + exit codes + notifications
+0 2 * * * (date; /opt/backup.sh; echo "Exit code: $?"; date) >> /var/log/backup.log 2>&1 || echo "Backup failed" | mail -s "BACKUP ALERT" admin@company.com
+
+# Check if cron daemon is running
+$ systemctl status cron     # Ubuntu/Debian
+$ systemctl status crond    # CentOS/RHEL
+
+# Check cron logs
+$ grep CRON /var/log/syslog  # Ubuntu/Debian
+$ grep CRON /var/log/cron    # CentOS/RHEL
+
+# Test cron expression is valid
+$ cron-explain "0 2 * * *"
+Input:  0 2 * * *
+Output: At 02:00
+
+# Manually trigger job to test
+$ /opt/backup.sh
+
+# Check crontab syntax
+$ crontab -l
+
+# Common gotchas:
+# 1. PATH is different in cron (use absolute paths)
+# 2. Environment variables aren't loaded (~/.bashrc doesn't run)
+# 3. Working directory is usually $HOME
+
+# Debug crontab with verbose PATH and env vars:
+PATH=/usr/local/bin:/usr/bin:/bin
+SHELL=/bin/bash
+MAILTO=admin@company.com
+
+0 2 * * * cd /opt && ./backup.sh >> /var/log/backup.log 2>&1
+
+# Test what environment cron sees:
+* * * * * env > /tmp/cron-env.txt
+# Wait a minute, then:
+$ cat /tmp/cron-env.txt
+```
+
+---
+
+### Example 15: Complex business logic schedules
+
+**Scenario:** "Run every quarter, on the 15th, unless it's a weekend, then run Monday."
+
+```bash
+# Cron can't do "unless it's a weekend, then Monday"
+# Closest approximation:
+
+# Run on 15th, 16th, 17th of Jan, Apr, Jul, Oct
+$ cron-explain "0 9 15-17 1,4,7,10 *"
+Input:  0 9 15-17 1,4,7,10 *
+Output: At 09:00 on every day-of-month from 15 through 17 in January, April, July, and October
+
+# This covers:
+# - 15th if weekday
+# - 16th if 15th is Saturday (Monday)
+# - 17th if 15th is Sunday (Monday) 
+
+# But runs ALL THREE DAYS if 15th is Friday!
+
+# Better: Use script with business logic
+#!/bin/bash
+# quarterly-report.sh
+
+MONTH=$(date +\%m)
+DAY=$(date +\%d)
+DOW=$(date +\%u)
+
+# Only run in Jan, Apr, Jul, Oct
+if [[ ! " 01 04 07 10 " =~ " $MONTH " ]]; then
+    exit 0
+fi
+
+# If today is 15th and weekday, run
+if [ $DAY -eq 15 ] && [ $DOW -le 5 ]; then
+    /opt/generate-quarterly-report.sh
+    exit 0
+fi
+
+# If today is Monday and 15th was weekend
+if [ $DOW -eq 1 ]; then
+    LAST_SUNDAY=$(date -d "last sunday" +\%d)
+    LAST_SATURDAY=$(date -d "last saturday" +\%d)
+    
+    if [ $LAST_SUNDAY -eq 15 ] || [ $LAST_SATURDAY -eq 15 ]; then
+        /opt/generate-quarterly-report.sh
+    fi
+fi
+
+# Run daily, script handles logic:
+0 9 * * * /opt/quarterly-report.sh >> /var/log/quarterly.log 2>&1
+
+# Alternative: Use 'when' or 'systemd calendar' for complex schedules
+# systemd.timer example:
+# OnCalendar=*-01,04,07,10-15..17 09:00:00
+```
+
+---
+
+### Example 16: Timezone-aware scheduling
+
+**Scenario:** Server is UTC but you want jobs to run at local business hours.
+
+```bash
+# Server is in UTC, you're in PST (UTC-8)
+# Want job to run at 9am PST = 5pm UTC (17:00)
+
+$ cron-explain "0 17 * * 1-5"
+Input:  0 17 * * 1-5
+Output: At 17:00 on Monday through Friday
+
+# But this breaks during daylight saving time!
+# PST becomes PDT (UTC-7), so 9am PDT = 4pm UTC (16:00)
+
+# Option 1: Set timezone in crontab (modern cron supports this)
+CRON_TZ=America/Los_Angeles
+0 9 * * 1-5 /opt/morning-job.sh
+
+# Option 2: Use systemd timers with timezone
+# /etc/systemd/system/morning-job.timer:
+[Timer]
+OnCalendar=America/Los_Angeles *-*-* 09:00:00
+Persistent=true
+
+# Option 3: Two crontabs (winter/summer)
+# Winter (PST):
+0 17 * 11-02 1-5 /opt/morning-job.sh  # Nov-Feb
+# Summer (PDT):
+0 16 * 03-10 1-5 /opt/morning-job.sh  # Mar-Oct
+
+# Check server timezone
+$ timedatectl
+$ date +\%Z
+
+# Test what time cron thinks it is
+* * * * * date >> /tmp/cron-time.txt
+```
+
+---
+
 ## Use Cases
 
 - Writing cron jobs for CI/CD
