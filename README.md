@@ -1290,6 +1290,272 @@ variable "backup_schedule" {
 
 ---
 
+### Real-World Deployment Patterns
+
+**Blue-Green Deployment Schedule:**
+
+```bash
+# Phase 1: Deploy to green (staging) nightly
+$ cron-explain "0 2 * * *"
+Input:  0 2 * * *
+Output: At 02:00
+
+# Phase 2: Smoke tests on green
+$ cron-explain "30 2 * * *"
+Input:  30 2 * * *
+Output: At 02:30
+
+# Phase 3: Swap blue/green (production) on Sundays
+$ cron-explain "0 3 * * 0"
+Input:  0 3 * * 0
+Output: At 03:00 on Sunday
+
+# Combined deployment schedule:
+0  2 * * * deploy_to_green.sh
+30 2 * * * smoke_test_green.sh
+0  3 * * 0 swap_blue_green.sh && notify_team.sh
+```
+
+---
+
+**Database Maintenance Windows:**
+
+```bash
+# Analyze tables every night (low load time)
+$ cron-explain "0 1 * * *"
+Input:  0 1 * * *
+Output: At 01:00
+
+0 1 * * * psql -c "ANALYZE VERBOSE"
+
+# Vacuum weekly during maintenance window
+$ cron-explain "0 3 * * 0"
+Input:  0 3 * * 0
+Output: At 03:00 on Sunday
+
+0 3 * * 0 psql -c "VACUUM ANALYZE"
+
+# Rebuild indexes monthly (first Sunday)
+$ cron-explain "0 4 1-7 * 0"
+Input:  0 4 1-7 * 0
+Output: At 04:00 on every day-of-month from 1 through 7 and on Sunday
+
+0 4 1-7 * 0 [ $(date +\%d) -le 7 ] && psql -c "REINDEX DATABASE mydb"
+```
+
+---
+
+**Gradual Rollout Pattern:**
+
+```bash
+# Deploy to 10% of servers (every 6 hours)
+$ cron-explain "0 */6 * * *"
+Input:  0 */6 * * *
+Output: At minute 0 past every 6th hour
+
+0 */6 * * * deploy.sh --canary --percentage 10
+
+# Deploy to 50% of servers (twice daily)
+$ cron-explain "0 6,18 * * *"
+Input:  0 6,18 * * *
+Output: At 06:00 and 18:00
+
+0 6,18 * * * deploy.sh --percentage 50
+
+# Full rollout (daily at 2am)
+$ cron-explain "0 2 * * *"
+Input:  0 2 * * *
+Output: At 02:00
+
+0 2 * * * deploy.sh --percentage 100
+```
+
+---
+
+**Backup Strategy - 3-2-1 Rule:**
+
+```bash
+# Local backup every 6 hours
+$ cron-explain "0 */6 * * *"
+Input:  0 */6 * * *
+Output: At minute 0 past every 6th hour
+
+0 */6 * * * /opt/backup_local.sh
+
+# Offsite backup daily
+$ cron-explain "0 3 * * *"
+Input:  0 3 * * *
+Output: At 03:00
+
+0 3 * * * /opt/backup_s3.sh
+
+# Archive to glacier weekly (Sundays)
+$ cron-explain "0 4 * * 0"
+Input:  0 4 * * 0
+Output: At 04:00 on Sunday
+
+0 4 * * 0 /opt/backup_glacier.sh
+
+# Verify backups monthly (first Monday)
+$ cron-explain "0 9 1-7 * 1"
+Input:  0 9 1-7 * 1
+Output: At 09:00 on every day-of-month from 1 through 7 and on Monday
+
+0 9 1-7 * 1 /opt/verify_backups.sh
+```
+
+---
+
+**Auto-Scaling Based on Schedule:**
+
+```bash
+# Scale up before business hours (Mon-Fri 8am)
+$ cron-explain "0 8 * * 1-5"
+Input:  0 8 * * 1-5
+Output: At 08:00 on Monday through Friday
+
+0 8 * * 1-5 aws autoscaling set-desired-capacity --auto-scaling-group-name web --desired-capacity 10
+
+# Scale down after hours (Mon-Fri 8pm)
+$ cron-explain "0 20 * * 1-5"
+Input:  0 20 * * 1-5
+Output: At 20:00 on Monday through Friday
+
+0 20 * * 1-5 aws autoscaling set-desired-capacity --auto-scaling-group-name web --desired-capacity 3
+
+# Weekend scale-down (Saturday midnight)
+$ cron-explain "0 0 * * 6"
+Input:  0 0 * * 6
+Output: At 00:00 on Saturday
+
+0 0 * * 6 aws autoscaling set-desired-capacity --auto-scaling-group-name web --desired-capacity 2
+```
+
+---
+
+**Security Scanning Schedule:**
+
+```bash
+# Quick vulnerability scan daily
+$ cron-explain "0 1 * * *"
+Input:  0 1 * * *
+Output: At 01:00
+
+0 1 * * * trivy image myapp:latest --severity HIGH,CRITICAL
+
+# Full security audit weekly (Sunday 2am)
+$ cron-explain "0 2 * * 0"
+Input:  0 2 * * 0
+Output: At 02:00 on Sunday
+
+0 2 * * 0 /opt/security_audit.sh
+
+# Dependency updates check (Monday mornings)
+$ cron-explain "0 9 * * 1"
+Input:  0 9 * * 1
+Output: At 09:00 on Monday
+
+0 9 * * 1 npm audit && pip-audit && go list -m -u all
+```
+
+---
+
+**Monitoring & Alerting Schedules:**
+
+```bash
+# Health checks every 5 minutes
+$ cron-explain "*/5 * * * *"
+Input:  */5 * * * *
+Output: At every 5 minutes
+
+*/5 * * * * curl -f http://localhost:3000/health || alert.sh
+
+# Generate uptime report (monthly, first day)
+$ cron-explain "0 9 1 * *"
+Input:  0 9 1 * *
+Output: At 09:00 on day-of-month 1
+
+0 9 1 * * /opt/generate_uptime_report.sh | mail -s "Monthly Uptime" ops@company.com
+
+# SLA compliance check (end of quarter)
+# Jan 1, Apr 1, Jul 1, Oct 1 at 9am
+$ cron-explain "0 9 1 1,4,7,10 *"
+Input:  0 9 1 1,4,7,10 *
+Output: At 09:00 on day-of-month 1 in January, April, July, and October
+
+0 9 1 1,4,7,10 * /opt/sla_compliance_check.sh
+```
+
+---
+
+**Data Pipeline Schedules:**
+
+```bash
+# ETL: Extract hourly
+$ cron-explain "0 * * * *"
+Input:  0 * * * *
+Output: At minute 0
+
+0 * * * * /opt/etl_extract.sh
+
+# Transform every 3 hours
+$ cron-explain "0 */3 * * *"
+Input:  0 */3 * * *
+Output: At minute 0 past every 3rd hour
+
+0 */3 * * * /opt/etl_transform.sh
+
+# Load to warehouse daily
+$ cron-explain "0 2 * * *"
+Input:  0 2 * * *
+Output: At 02:00
+
+0 2 * * * /opt/etl_load.sh
+
+# Data quality checks (after load)
+$ cron-explain "30 2 * * *"
+Input:  30 2 * * *
+Output: At 02:30
+
+30 2 * * * /opt/data_quality_check.sh
+```
+
+---
+
+**Machine Learning Model Updates:**
+
+```bash
+# Collect training data hourly
+$ cron-explain "0 * * * *"
+Input:  0 * * * *
+Output: At minute 0
+
+0 * * * * /opt/ml_collect_data.sh
+
+# Retrain model weekly (Sunday 3am)
+$ cron-explain "0 3 * * 0"
+Input:  0 3 * * 0
+Output: At 03:00 on Sunday
+
+0 3 * * 0 /opt/ml_retrain_model.sh
+
+# Model performance evaluation (daily)
+$ cron-explain "0 6 * * *"
+Input:  0 6 * * *
+Output: At 06:00
+
+0 6 * * * /opt/ml_evaluate_model.sh
+
+# Deploy new model if better (after evaluation)
+$ cron-explain "30 6 * * *"
+Input:  30 6 * * *
+Output: At 06:30
+
+30 6 * * * /opt/ml_deploy_if_better.sh
+```
+
+---
+
 ## Troubleshooting
 
 ### "Error: Invalid cron expression"
@@ -1516,6 +1782,422 @@ cron-explain "0 5 * * 1" --json 2>/dev/null | jq .
 
 # Or update to latest version:
 npm update -g cron-explain
+```
+
+---
+
+### Cron Not Running at Expected Time
+
+**Problem:** Cron syntax is valid but job doesn't run when expected.
+
+**Common issues:**
+
+1. **Server timezone vs local timezone:**
+```bash
+# Your local time: 5pm PST
+# Server time: 1am UTC (next day!)
+
+# Check server timezone:
+$ timedatectl  # Linux
+$ date +%Z     # All systems
+
+# Cron runs in server timezone!
+# Want 5pm PST (UTC-8), server is UTC:
+$ cron-explain "0 1 * * *"  # 1am UTC = 5pm PST previous day
+Input:  0 1 * * *
+Output: At 01:00
+
+# Or set timezone in crontab:
+CRON_TZ=America/Los_Angeles
+0 17 * * * /opt/job.sh  # 5pm PST
+```
+
+2. **Day of month AND day of week (OR logic):**
+```bash
+# Want: First Monday only
+# Wrong:
+$ cron-explain "0 9 1 * 1"
+Input:  0 9 1 * 1
+Output: At 09:00 on day-of-month 1 and on Monday
+# This runs on 1st of month OR every Monday!
+
+# Correct:
+$ cron-explain "0 9 1-7 * 1"
+Input:  0 9 1-7 * 1
+Output: At 09:00 on every day-of-month from 1 through 7 and on Monday
+# Then use script to check if it's the 1st week
+
+# Or use script logic:
+0 9 * * 1 [ $(date +\%d) -le 7 ] && /opt/job.sh
+```
+
+3. **Daylight saving time surprises:**
+```bash
+# Cron job at 2:30am during DST switch
+
+# Spring forward (2am → 3am):
+# Job at 2:30am doesn't run! That hour doesn't exist.
+
+# Fall back (2am → 1am):
+# Job at 2:30am runs TWICE! Hour repeats.
+
+# Solution: Avoid 2am-3am for critical jobs
+# Or use timezone-aware scheduling (systemd timers)
+$ cron-explain "0 1 * * *"   # Before DST switch
+$ cron-explain "0 4 * * *"   # After DST switch
+```
+
+4. **PATH environment differences:**
+```bash
+# Cron runs with minimal PATH
+# Command works in terminal but not in cron
+
+# Debug: Check what PATH cron sees
+* * * * * env > /tmp/cron-env.txt
+# Wait a minute, then:
+$ cat /tmp/cron-env.txt | grep PATH
+PATH=/usr/bin:/bin  # Very minimal!
+
+# Fix: Set PATH in crontab
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+0 5 * * * node /opt/script.js  # Now it finds node
+```
+
+5. **Cron daemon not running:**
+```bash
+# Check if cron service is active
+$ systemctl status cron     # Ubuntu/Debian
+$ systemctl status crond    # CentOS/RHEL
+$ brew services list | grep cron  # macOS
+
+# If not running:
+$ sudo systemctl start cron
+$ sudo systemctl enable cron  # Start on boot
+```
+
+---
+
+### Understanding Cron Step Values
+
+**Problem:** `/` syntax is confusing.
+
+**Explanation:**
+```bash
+# */15 means "every 15" starting from 0
+$ cron-explain "*/15 * * * *"
+Input:  */15 * * * *
+Output: At every 15 minutes past every hour
+# Runs at: :00, :15, :30, :45
+
+# But 5-30/5 means "every 5 between 5 and 30"
+$ cron-explain "5-30/5 * * * *"
+Input:  5-30/5 * * * *
+Output: At every 5 minutes from 5 through 30
+# Runs at: :05, :10, :15, :20, :25, :30
+
+# Common misconception: "*/5" doesn't mean "every 5 minutes starting now"
+# It means "when minute % 5 == 0"
+
+# Want exactly every 5 minutes?
+# You need multiple cron jobs or use a looping script:
+* * * * * /opt/run-every-5-min.sh
+# run-every-5-min.sh:
+# for i in {0..11}; do
+#   /opt/actual-task.sh
+#   sleep 300  # 5 minutes
+# done
+```
+
+---
+
+### Complex Schedule Patterns
+
+**Scenario 1: Business days only (skip holidays)**
+
+```bash
+# Cron can't handle holidays, but you can work around it
+
+# Option 1: Check against holiday list in script
+0 9 * * 1-5 /opt/check-holiday.sh
+
+# check-holiday.sh:
+#!/bin/bash
+if grep -q "$(date +\%Y-\%m-\%d)" /opt/holidays.txt; then
+  echo "Holiday, skipping"
+  exit 0
+fi
+/opt/actual-work.sh
+
+# holidays.txt:
+# 2026-01-01  # New Year
+# 2026-07-04  # Independence Day
+# 2026-12-25  # Christmas
+```
+
+**Scenario 2: Staggered starts (avoid thundering herd)**
+
+```bash
+# Bad: All 100 servers run job at same time
+0 2 * * * /opt/heavy-job.sh
+
+# Good: Stagger by server ID (0-99)
+# Server 0: 02:00
+# Server 1: 02:01
+# Server 99: 03:39
+
+# In script:
+SERVER_ID=$(hostname | grep -o '[0-9]*$')
+MINUTE=$((SERVER_ID % 60))
+HOUR=$((2 + SERVER_ID / 60))
+
+# Or use random delay:
+0 2 * * * sleep $((RANDOM \% 3600)) && /opt/heavy-job.sh
+# Spreads load over 1 hour window
+```
+
+**Scenario 3: Month-end processing (handle February, 30 vs 31 days)**
+
+```bash
+# Want: Last day of every month
+
+# Wrong: 0 0 31 * *
+# This skips months with <31 days (Feb, Apr, Jun, Sep, Nov)
+
+# Right: Use script to check
+0 0 28-31 * * [ $(date -d tomorrow +\%d) -eq 1 ] && /opt/month-end.sh
+# Checks if tomorrow is the 1st → today is last day of month
+
+# Or calculate last day:
+0 0 * * * [ $(date +\%d) -eq $(date -d "$(date +\%Y-\%m-01) +1 month -1 day" +\%d) ] && /opt/month-end.sh
+```
+
+**Scenario 4: Leap year handling**
+
+```bash
+# Want: Run on Feb 29 (leap years only)
+$ cron-explain "0 0 29 2 *"
+Input:  0 0 29 2 *
+Output: At 00:00 on day-of-month 29 in February
+
+# This works! Cron will run it only in leap years.
+# Non-leap years: Feb 29 doesn't exist, cron skips it.
+
+# But to explicitly check:
+0 0 29 2 * [ $(($(date +\%Y) \% 4)) -eq 0 ] && /opt/leap-year-job.sh
+```
+
+**Scenario 5: Quarterly reports (every 3 months)**
+
+```bash
+# Jan, Apr, Jul, Oct
+$ cron-explain "0 9 1 1,4,7,10 *"
+Input:  0 9 1 1,4,7,10 *
+Output: At 09:00 on day-of-month 1 in January, April, July, and October
+
+0 9 1 1,4,7,10 * /opt/quarterly-report.sh
+
+# Or first Monday of those months:
+0 9 1-7 1,4,7,10 1 /opt/quarterly-report.sh
+```
+
+---
+
+### Debugging Cron Execution
+
+**Enable detailed logging:**
+
+```bash
+# Add to crontab:
+MAILTO=you@example.com
+SHELL=/bin/bash
+CRON_LOG=/var/log/mycron.log
+
+* * * * * (date; /opt/test-job.sh; echo "Exit code: $?") >> $CRON_LOG 2>&1
+
+# Check logs:
+$ tail -f /var/log/mycron.log
+```
+
+**Test cron expression without waiting:**
+
+```bash
+# Don't wait for 2am to see if job works!
+
+# Option 1: Set to run in next minute
+$ date  # Check current time: 14:35
+$ crontab -e
+36 14 * * * /opt/test-job.sh  # Runs at 14:36
+
+# Option 2: Use `at` command for one-time run
+$ echo "/opt/test-job.sh" | at now + 1 minute
+
+# Option 3: Run manually with cron's environment
+$ env -i HOME=$HOME SHELL=/bin/bash PATH=/usr/bin:/bin /opt/test-job.sh
+
+# Option 4: Temporarily change cron schedule, test, then revert
+```
+
+**Validate cron will trigger:**
+
+```bash
+# Show next 5 run times for a cron expression
+# (Requires external tool: croniter, cronstrue, or online calculator)
+
+$ python3 << EOF
+from croniter import croniter
+from datetime import datetime
+
+cron = croniter('0 2 * * 1', datetime.now())
+for i in range(5):
+    print(cron.get_next(datetime))
+EOF
+
+# Output:
+# 2026-02-09 02:00:00
+# 2026-02-16 02:00:00
+# 2026-02-23 02:00:00
+# 2026-03-02 02:00:00
+# 2026-03-09 02:00:00
+```
+
+---
+
+### Common Anti-Patterns
+
+**❌ Running every minute for something that should be event-driven:**
+
+```bash
+# Bad: Poll for file existence every minute
+* * * * * [ -f /tmp/trigger.txt ] && /opt/process.sh && rm /tmp/trigger.txt
+
+# Better: Use inotifywait (file watcher)
+$ inotifywait -m /tmp -e create -e moved_to |
+  while read path action file; do
+    if [[ "$file" == "trigger.txt" ]]; then
+      /opt/process.sh
+    fi
+  done
+```
+
+**❌ Long-running jobs in cron without lock files:**
+
+```bash
+# Bad: Job takes 70 minutes, runs every hour
+0 * * * * /opt/slow-job.sh
+
+# Runs overlap! At 2pm:
+# - 1pm job still running (10 min left)
+# - 2pm job starts
+# Result: Two instances fighting over resources
+
+# Good: Use lock file
+0 * * * * flock -n /tmp/slow-job.lock -c /opt/slow-job.sh
+
+# Or check if already running:
+0 * * * * pgrep -f slow-job.sh || /opt/slow-job.sh
+```
+
+**❌ Hardcoded dates in cron:**
+
+```bash
+# Bad: Temporary cron for specific date, then forgotten
+0 9 15 2 * /opt/one-time-migration.sh  # Runs every Feb 15!
+
+# Better: Use `at` for one-time jobs
+$ echo "/opt/one-time-migration.sh" | at 09:00 Feb 15
+
+# Or add expiration to crontab:
+0 9 15 2 * [ $(date +\%Y) -eq 2026 ] && /opt/one-time-migration.sh
+# Only runs in 2026
+```
+
+**❌ Cron job that requires user interaction:**
+
+```bash
+# Bad: Script prompts for input
+0 2 * * * /opt/interactive-backup.sh
+# Cron can't provide input! Job hangs forever.
+
+# Good: Make script non-interactive
+0 2 * * * /opt/backup.sh --yes --quiet --destination /mnt/backup
+```
+
+---
+
+### Platform-Specific Gotchas
+
+**macOS:**
+```bash
+# macOS cron doesn't survive reboots well
+# Better: Use launchd
+
+# Convert cron to launchd plist:
+$ cron-explain "0 2 * * *"
+Input:  0 2 * * *
+Output: At 02:00
+
+# Create ~/Library/LaunchAgents/com.user.backup.plist:
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "...">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.user.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/backup.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+</dict>
+</plist>
+
+$ launchctl load ~/Library/LaunchAgents/com.user.backup.plist
+```
+
+**Docker containers:**
+```bash
+# Cron in Docker requires special setup
+
+# Dockerfile:
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y cron
+COPY crontab /etc/cron.d/my-cron
+RUN chmod 0644 /etc/cron.d/my-cron
+RUN crontab /etc/cron.d/my-cron
+CMD ["cron", "-f"]  # Run in foreground
+
+# Better: Use host cron or Kubernetes CronJob
+```
+
+**Systemd timers (modern Linux alternative to cron):**
+```bash
+# Cron expression: 0 2 * * *
+$ cron-explain "0 2 * * *"
+Input:  0 2 * * *
+Output: At 02:00
+
+# Equivalent systemd timer:
+# /etc/systemd/system/backup.timer:
+[Unit]
+Description=Daily backup at 2am
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
+# Advantages over cron:
+# - Better logging (journalctl -u backup.service)
+# - Dependencies (run after network.target)
+# - Randomization (OnCalendar=*-*-* 02:00:00 + RandomizedDelaySec=300)
 ```
 
 ---
